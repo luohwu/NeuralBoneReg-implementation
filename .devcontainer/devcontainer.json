@@ -1,0 +1,34 @@
+{
+  "name": "nirr-stand-alone",
+  "build": {
+    "context": "..",
+    "dockerfile": "../Dockerfile"
+  },
+  "workspaceFolder": "/workspace/stand_alone",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace/stand_alone,type=bind",
+  "mounts": [
+    "source=${localWorkspaceFolder}/../data,target=/workspace/data,type=bind",
+    "source=${localWorkspaceFolder}/../checkpoints_UltraBoneUDF,target=/workspace/checkpoints_UltraBoneUDF,type=bind",
+    "source=${localWorkspaceFolder}/../pcds_mm,target=/workspace/pcds_mm,type=bind"
+  ],
+  "runArgs": [
+    "--gpus",
+    "all",
+    "--shm-size=16g"
+  ],
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "python.defaultInterpreterPath": "/opt/conda/bin/python",
+        "python.analysis.extraPaths": [
+          "/workspace/stand_alone"
+        ]
+      },
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance"
+      ]
+    }
+  },
+  "remoteUser": "root"
+}

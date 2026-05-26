@@ -1,0 +1,21 @@
+﻿seed_number: 50
+
+point_cloud_size: 40000
+num_optimization_steps: 1000
+num_sampled_points: 3000
+perturbation_angle_range: 180
+perturbation_translation_range: 500
+
+specimen_id: 0
+anatomy: "L2"
+num_heads: 2000
+size_coarse_pcd: 512
+refine_heads: 64
+num_runs: 5
+show_registration_visualization: true
+
+preoperative_data_dir: "./data/SpineDepth/preoperative"
+intraoperative_data_dir: "./data/SpineDepth/intraoperative"
+checkpoint_root: "./checkpoints_NeuralUDF/SpineDepth"
+udf_config_file: "./models/NeuralUDF/conf/conf_NeuralUDF.conf"
+

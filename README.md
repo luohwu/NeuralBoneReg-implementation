@@ -2,7 +2,8 @@
 
 This repository contains the official implementation of NeuralBoneReg. For the paper, see [NeuralBoneReg](https://doi.org/10.1016/j.media.2026.104133).
 
-The repo is still under development, and we are currently preparing the UltraBonesHip dataset for release. Stay tuned.
+The repository is currently just a working version, and we are preparing the final full release, including the dataset, which is due at the end of June 2026. Stay tuned.
+
 
 ## Table of Contents
 

@@ -1,0 +1,130 @@
+# Configuration for the 3D ultrasound reconstruction pipeline.
+# Run with:  python -m reconstruction --config reconstruction/conf/reconstruction.yaml
+
+# ---------------------------------------------------------------------------
+# Inputs
+# ---------------------------------------------------------------------------
+# Raw dataset root: <root>/<specimen>/{ultrasound_records, CT_bone_segmentations}.
+# Download the UltraBonesHip dataset from Hugging Face and make it available here. In the
+# devcontainer it is bind-mounted to /mnt/UltraBonesHip (set the host path via
+# ULTRABONESHIP_DIR; see .devcontainer/devcontainer.json and data/README.md). On a bare
+# host, override with --dataset-root or change this value.
+dataset_root: "/mnt/UltraBonesHip"
+specimen_ids: ["specimen00", "specimen01", "specimen02", "specimen03", "specimen04"]
+
+# Pretrained bone-segmentation checkpoint (a full pickled segmentation_models_pytorch
+# FPN). Auto-downloaded from Hugging Face on first use (git-ignored), or place it here.
+checkpoint_path: "reconstruction/models/epoch_30_leave_12_out.pth"
+
+# Calibration presets (vendored) and the specimen -> preset assignment.
+preset_calibration_file: "reconstruction/conf/preset_calibration.yaml"
+specimen_to_preset_map:
+  specimen00: SpineUS
+  specimen01: SpineUS
+  specimen02: SpineUS
+  specimen03: SpineUS
+  specimen04: SpineUS
+
+# Per-record pose CSV (relative to each record folder). Raw tracking poses.
+pose_csv_name: "poses.csv"
+
+# ---------------------------------------------------------------------------
+# Segmentation + mask post-processing
+# ---------------------------------------------------------------------------
+segmentation_threshold: 0.5
+# Inference throughput. The pipeline is I/O-bound (decoding US frames), so images
+# are loaded/preprocessed in parallel worker processes and the GPU forward pass is
+# batched. Tune to your machine: larger batch -> better GPU use (until VRAM-bound);
+# more workers -> faster image loading (until disk/CPU-bound).
+seg_batch_size: 16                         # frames per GPU forward pass
+seg_num_workers: null                      # image-loading processes (null -> auto from CPU count)
+seg_amp: false                             # fp16 autocast on CUDA (faster; masks differ by a few edge px)
+postprocess: "skeleton_only"               # "skeleton_only" | "icp_clean"
+# icp_clean options (only used when postprocess == icp_clean):
+mask_border_px: 10
+keep_largest_components: 1
+min_mask_pixels: 20
+min_skeleton_pixels: 5
+
+# ---------------------------------------------------------------------------
+# Reconstruction folders mapped onto NeuralBoneReg anatomies.
+# Keys are the output anatomy names (specimenNN_<key>.xyz); values are the raw
+# ultrasound_records/<folder> sweeps whose filtered clouds are unioned.
+# ---------------------------------------------------------------------------
+merge_map:
+  left_femur:  ["left_femur_axial", "left_femur_coronal"]
+  right_femur: ["right_femur_axial", "right_femur_coronal"]
+  pelvis:      ["left_pelvis_axial", "left_pelvis_coronal", "right_pelvis_axial", "right_pelvis_coronal"]
+
+record_selection: "all"                    # "all" -> every record* dir in each sweep folder
+
+# ---------------------------------------------------------------------------
+# Point-cloud processing
+# ---------------------------------------------------------------------------
+raw_downsample: 1000000                    # cap per-record cloud
+merge_downsample: 40000                    # final cap per merged anatomy file
+
+# CT-free denoiser (no CT mesh used). Applied to each merged anatomy: DBSCAN groups
+# points by an `eps`-mm neighbourhood, clusters smaller than
+# max(keep_abs_frac*N, keep_frac*largest) are dropped as noise (frames that missed
+# bone), then statistical outlier removal cleans residual fuzz.
+denoise_enable: true
+denoise_work_points: 200000                # subsample size for clustering (density-stable params)
+denoise_dbscan_eps: 1.5                     # DBSCAN neighbourhood radius (mm)
+denoise_dbscan_min_points: 10              # DBSCAN core min neighbours
+denoise_keep_frac: 0.10                    # keep clusters >= this fraction of the largest cluster
+denoise_keep_abs_frac: 0.01               # ...and >= this fraction of all points (absolute floor)
+sor_nb_neighbors: 20                       # statistical outlier removal: neighbours
+sor_std_ratio: 1.5                         # statistical outlier removal: std multiplier
+
+# CT-free denoiser selection.
+#   "shadow" -> acoustic-shadow image-cue denoiser (per-anatomy; DEFAULT). A true bone
+#               reflector casts a dark acoustic shadow; bright-below detections
+#               (reverberation/soft tissue) are dropped, then DBSCAN keeps every cluster
+#               above an absolute floor so the full bone extent (coverage) is preserved.
+#               Uses the image-carrying inference path (loads native frames for the shadow
+#               window), so it is a little slower than "dbscan".
+#   "dbscan" -> the geometric DBSCAN cluster-keep + SOR denoiser above (faster, no image
+#               features). Use it as a fallback.
+denoise_method: "shadow"
+shadow_below_gap: 4                         # px below a bone pixel where the shadow window starts
+shadow_below_height: 60                     # px height of the shadow window (~5 mm)
+# Per-group shadow params. left_femur/right_femur map to the "femur" group; the pelvis is
+# denoised by the multi-view consensus recipe below (the acoustic-shadow cue does not
+# separate on/off-bone on the pelvis).
+shadow_params:
+  femur:  {below_thr: 0.35, below_depthnorm: null, dbscan: true, eps: 1.5, min_points: 10, keep_frac: 0.10, keep_abs: 0.01, sor_nb: 20, sor_std: 1.5}
+
+# Multi-view-consensus denoiser (the pelvis recipe; CT-free). Pelvis off-bone noise
+# (reverberation, soft tissue) is coherent -- dense, clustered, multi-frame within a
+# single sweep -- so the shadow cue and density-based cleaning do not remove it. Keep
+# points whose `voxel`-mm cell is corroborated by >= `min_frames` independent sweeps; then
+# keep the largest cluster per hemipelvis (scan-folder side) so both sides survive; SOR;
+# then balance the two sides. See filtering.denoise_with_consensus.
+consensus_anatomies: ["pelvis"]
+consensus_params: {voxel: 2.0, min_frames: 8, eps: 1.0, min_points: 10, sor_nb: 20, sor_std: 1.5, balance: true}
+
+# ---------------------------------------------------------------------------
+# Robustness / behaviour
+# ---------------------------------------------------------------------------
+strict_image_size: true                    # assert each frame's native size == preset size
+write_per_record: true                     # write <record>/3D_reconstructions/neuralbonereg/*.xyz (non-clobbering)
+frame_stride: 1                            # 1 = all frames; >1 subsamples (for quick tests)
+visualize: false                           # never open blocking Open3D windows by default
+seed: 42
+
+# ---------------------------------------------------------------------------
+# Output (main_UltraBonesHip.py-ready, frame-consistent pair per anatomy)
+# ---------------------------------------------------------------------------
+# Reconstructed intraoperative clouds and the matching preoperative CT meshes are
+# written here, both in the CT-segmentation frame, so they register against each
+# other. main_UltraBonesHip.py reads specimenNN_<anatomy>.{stl,xyz} from these directories
+# (point its preoperative_data_dir / intraoperative_data_dir here).
+intraoperative_dir: "data/UltraBonesHip/intraoperative"  # specimenNN_<anatomy>.xyz  (reconstructed US clouds)
+preoperative_dir: "data/UltraBonesHip/preoperative"      # specimenNN_<anatomy>.stl  (copied CT bone meshes)
+export_preoperative: true                  # also write CT_bone_segmentations/<anatomy>.stl as the preop model
+# Preop model = the OUTER bone surface (ray-cast visible shell) instead of the raw CT
+# segmentation, so the NeuralUDF / registration target matches what ultrasound images
+# (US cannot see internal faces). false -> copy the raw CT mesh. See outer_surface.py.
+preop_outer_surface: true
+overwrite: false                           # refuse to overwrite existing output files

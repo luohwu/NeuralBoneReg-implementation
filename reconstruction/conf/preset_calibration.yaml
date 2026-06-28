@@ -1,0 +1,29 @@
+# Ultrasound probe calibration presets (vendored from UltrasoundDatasetCollection).
+#
+# Only the fields used by reconstruction are kept:
+#   image_plane_origin : must be 'center' (the only supported convention)
+#   scale_x / scale_y  : millimetres per pixel
+#   image_width/height : native ultrasound image size in pixels (used by T_scale)
+#   translation / euler_xyz : ideal-probe -> US-image-plane transform (mm, degrees)
+#
+# A specimen is mapped to a preset by reconstruction.yaml::specimen_to_preset_map.
+# For UltraBonesHip specimen00..04 the acquisition used the SpineUS preset
+# (scale 0.080227, 638x829), which matches the per-frame CSV columns.
+
+HipUS:
+  image_plane_origin: center
+  scale_x: 0.070284
+  scale_y: 0.070284
+  image_width: 728
+  image_height: 829
+  translation: [0, 39.41264702, 0]
+  euler_xyz: [0, 0, 0]
+
+SpineUS:
+  image_plane_origin: center
+  scale_x: 0.080227
+  scale_y: 0.080227
+  image_width: 638
+  image_height: 829
+  translation: [0, 44.17691472, 0]
+  euler_xyz: [0, 0, 0]

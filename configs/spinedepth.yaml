@@ -1,0 +1,42 @@
+seed_number: 50
+
+point_cloud_size: 40000
+num_optimization_steps: 1000
+num_sampled_points: 3000
+perturbation_angle_range: 180
+perturbation_translation_range: 500
+
+num_heads: 2000
+size_coarse_pcd: 512
+refine_heads: 64
+num_runs: 10   # perturbation trials per case
+show_registration_visualization: false
+
+# Per-point score aggregation = 0.5*mean + 0.5*max over each hypothesis's points. The
+# worst-point penalty encourages every point onto the surface, which helps pin rotation
+# for partial, near-symmetric vertebra views. The per-head optimization loss stays mean(),
+# as for UltraBonesHip -- only this per-point score differs.
+score_mode: meanmax
+
+# Extract the externally-visible (outer) shell of the preoperative CT mesh before training
+# NeuralUDF (default on, dataset-agnostic). Near no-op for SpineDepth, whose meshes are
+# already decimated outer surfaces, but kept on for consistency across datasets.
+preop_outer_surface: true
+# Ray budget (viewpoints x pixels) for the extraction; 128 x 384 is hole-free here.
+outer_surface_views: 128
+outer_surface_pixels: 384
+
+# SpineDepth case selection — one config covers the whole dataset. main_SpineDepth.py
+# iterates every specimen x level x camera below.
+specimens: [2, 3, 4, 5, 6, 7, 8]    # released set; specimens 1, 9, 10 excluded (insufficient anatomical coverage)
+levels: ["L1", "L2", "L3", "L4", "L5"]
+cameras: [0, 1]                         # register each depth-camera view separately
+
+# Auto-downloaded into ./data/SpineDepth on first run if absent (public repo needs no
+# auth; a private one uses your cached `hf auth login` token).
+hf_repo: "luohwu/SpineDepth_segmented"
+
+preoperative_data_dir: "./data/SpineDepth/preoperative"
+intraoperative_data_dir: "./data/SpineDepth/intraoperative"
+checkpoint_root: "./checkpoints_NeuralUDF/SpineDepth"
+udf_config_file: "./models/NeuralUDF/conf/conf_NeuralUDF.conf"

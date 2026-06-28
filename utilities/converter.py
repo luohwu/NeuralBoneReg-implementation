@@ -10,6 +10,19 @@ from utilities.OwnPytorch3d import quaternion_to_matrix
 
 
 def filter_src_by_tgt_distance_o3d(src_pcd, tgt_pcd, dis_threshold):
+    """EVALUATION ONLY -- keep the ``src_pcd`` points within ``dis_threshold`` of ``tgt_pcd``.
+
+    This is used in exactly one place: to build the CD/HD95 *evaluation* target, i.e. the
+    slice of the preoperative surface that the partial intraoperative cloud plausibly
+    observed (comparing the full preop surface to a partial cloud would inflate the metrics
+    over never-observed regions).
+
+    It is **NOT part of the registration pipeline.** The pose optimization
+    (``registration_core.estimate_transformation``) scores the intraoperative cloud against
+    the frozen NeuralUDF only and never receives this filtered cloud, so restricting the
+    metric region cannot leak into the estimated transform. RTE/RRE are computed purely from
+    the estimated-vs-ground-truth matrices and also do not depend on it.
+    """
     if not isinstance(src_pcd, o3d.geometry.PointCloud) or not isinstance(tgt_pcd, o3d.geometry.PointCloud):
         raise TypeError("src_pcd and tgt_pcd must be open3d.geometry.PointCloud")
 
@@ -47,6 +60,13 @@ def vectorToMatrix(t, rotation_vector, quat=False):
 
 
 def compute_RTE_RRE_pcds(T_est, T_gt, translation_scale, src_pcd_moved, tgt_pcd):
+    """Compute the reported registration metrics (all in mm / degrees).
+
+    RTE/RRE come purely from the estimated vs. ground-truth transforms. CD/HD95 compare the
+    registered intraoperative cloud against ``tgt_pcd`` -- which is the EVALUATION-ONLY
+    filtered preoperative cloud (see ``filter_src_by_tgt_distance_o3d``). This function is an
+    evaluator: it runs after the pose is already estimated and never feeds back into it.
+    """
     R1, t1 = T_est[:3, :3], T_est[:3, 3]
     R2, t2 = T_gt[:3, :3], T_gt[:3, 3]
 

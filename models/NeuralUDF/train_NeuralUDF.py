@@ -198,7 +198,7 @@ class Runner_UDF:
 
 
 def train_NeuralUDF(dataset_processed,udf_network,base_exp_dir):
-    # Thin wrapper used by main.py when a pretrained checkpoint is missing.
+    # Thin wrapper used by registration_core.load_udf_network when a checkpoint is missing.
     runner = Runner_UDF(dataset_processed,udf_network,base_exp_dir)
     runner.train()
 

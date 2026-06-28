@@ -1,0 +1,17 @@
+# Keep the Docker build context small and deterministic. The image only COPYs
+# extensions/; excluding caches/artifacts keeps that COPY layer byte-stable (so the
+# build cache is reused), and the rest just avoids sending large dirs to the daemon.
+**/__pycache__/
+**/*.pyc
+**/*.so
+*.egg-info/
+**/*.egg-info/
+extensions/chamfer_dist/build/
+.git/
+data/
+checkpoints_NeuralUDF/
+reconstruction/_denoise_cache/
+reconstruction/_smoke_output/
+reconstruction/models/*.pth
+.claude-memory/
+public_repo/

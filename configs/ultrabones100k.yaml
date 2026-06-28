@@ -1,0 +1,65 @@
+seed_number: 50
+
+point_cloud_size: 40000
+num_optimization_steps: 1000
+num_sampled_points: 3000
+perturbation_angle_range: 180
+perturbation_translation_range: 500
+
+num_heads: 2000
+size_coarse_pcd: 512
+refine_heads: 64
+num_runs: 10  # perturbation trials per case (10 = the robust default used across all datasets;
+              # >1 is needed to characterize the borderline axial-slide fibulae).
+
+show_registration_visualization: false
+
+# Per-point score aggregation (the per-head optimization loss stays mean(), hardcoded in
+# registration_core). "trimmed" scores each pose on only the closest trim_keep fraction of
+# points, dropping the far tail. On these long thin bones the fibula sweep carries a residual
+# off-bone tail (tibiofibular-junction contamination + reverb) that, under "mean"/"meanmax",
+# biases the score enough to make a ~180 deg flipped pose competitive -> catastrophic flips
+# (fibula RR was 0.36 under meanmax). Dropping that tail removes the flip basin. trim_keep=0.7
+# (drop farthest 30%) is the sweet spot: 0.6 (drop 40%) also kills flips but loosens the
+# long-axis translation on borderline cases; 0.7 keeps flips broken AND keeps translation
+# tight. The tibia tolerates trimming (unlike a two-sided pelvis), so one global setting works.
+# Validated: 28 cases x 5 runs -> RR 0.957 (tibia 1.000, fibula 0.914), RTE 2.12+/-1.33mm,
+# RRE 1.72+/-1.12deg; zero flips remain (all residual misses are fibula axial-slide RTE
+# borderlines, not flips). See main_UltraBones100k.py header.
+score_mode: trimmed
+trim_keep: 0.7
+
+# Outer-surface extraction of the preoperative CT mesh (default on, dataset-agnostic).
+preop_outer_surface: true
+outer_surface_views: 128
+outer_surface_pixels: 384
+
+# --- UltraBones100k case selection -------------------------------------------------------
+# 14 specimens; only fibula and tibia are used (foot is excluded from this project).
+specimens: ["specimen01", "specimen02", "specimen03", "specimen04", "specimen05",
+            "specimen06", "specimen07", "specimen08", "specimen09", "specimen10",
+            "specimen11", "specimen12", "specimen13", "specimen14"]
+anatomies: ["fibula", "tibia"]
+
+# --- Data prep (main_UltraBones100k.py) --------------------------------------------------
+# Raw dataset (bind-mounted in the devcontainer). The per-record reconstructions live at
+# <dataset_root>/<specimen>/ultrasound_records/<anatomy>/record*/3D_reconstructions/with_pred_labels/reconstruction_pcd.xyz
+# and the CT bone meshes at <dataset_root>/<specimen>/CT_bone_segmentations/<anatomy>.stl
+# (path assumption -- verify after the devcontainer rebuild).
+dataset_root: "/mnt/UltraBones100k"
+record_glob: "ultrasound_records/{anatomy}/record*/3D_reconstructions/with_pred_labels/reconstruction_pcd.xyz"
+
+# Cross-bone denoiser for the merged per-record cloud (CT-free): DBSCAN keeps the dominant
+# cluster (the target bone) and drops the smaller other-bone cluster -- a fibula sweep
+# contains some tibia points and vice versa -- then statistical outlier removal cleans
+# residual fuzz. eps is in mm; TUNE it to the fibula/tibia gap after the dataset is built.
+denoise_dbscan_eps: 2.0
+denoise_dbscan_min_points: 10
+denoise_work_points: 200000   # cap the merged cloud before DBSCAN (speed; density-stable)
+sor_nb_neighbors: 20
+sor_std_ratio: 2.0
+
+preoperative_data_dir: "./data/UltraBones100k/preoperative"
+intraoperative_data_dir: "./data/UltraBones100k/intraoperative"
+checkpoint_root: "./checkpoints_NeuralUDF/UltraBones100k"
+udf_config_file: "./models/NeuralUDF/conf/conf_NeuralUDF.conf"

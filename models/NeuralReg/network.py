@@ -90,6 +90,8 @@ class NeuralReg(nn.Module):
         amp_dtype=torch.float16,
         use_coarse_refine=True,
         refine_topk_heads=64,
+        score_mode="mean",
+        trim_keep=1.0,
     ):
         super(NeuralReg, self).__init__()
         self.num_heads = num_heads
@@ -98,6 +100,13 @@ class NeuralReg(nn.Module):
         self.amp_dtype = amp_dtype
         self.use_coarse_refine = use_coarse_refine
         self.refine_topk_heads = refine_topk_heads
+        # Per-head score aggregation over points. "mean" (default) reproduces the
+        # original plain mean-UDF score. "trimmed" keeps only the closest
+        # ``trim_keep`` fraction of points per head and averages those, so a
+        # residual off-bone fragment (high UDF) cannot bias the pose -- the
+        # registration-time analogue of keep-largest, applied uniformly.
+        self.score_mode = score_mode
+        self.trim_keep = float(trim_keep)
 
         # This module starts from a learnable/global latent seed and optimizes a
         # large set of pose hypotheses against the frozen UDF network.
@@ -121,6 +130,29 @@ class NeuralReg(nn.Module):
             nn.Linear(128, 128), nn.Tanh(),
             nn.Linear(128, 128), nn.Tanh(),
         )
+
+    def _aggregate(self, udf_per_point):
+        """Aggregate per-head per-point UDF ``[num_heads, M]`` -> per-head score
+        ``[num_heads]`` (lower = better fit). Modes:
+          mean     - original equal-weight average.
+          trimmed  - mean of the closest ``trim_keep`` fraction (ignore off-bone tail).
+          median   - robust middle (insensitive to both tails).
+          max      - worst point (minimax; forces all points onto the surface).
+          meanmax  - 0.5*mean + 0.5*max (average fit + worst-point penalty).
+        """
+        mode = self.score_mode
+        if mode == "trimmed" and self.trim_keep < 1.0:
+            m = udf_per_point.shape[1]
+            k = max(1, int(round(m * self.trim_keep)))
+            closest, _ = torch.topk(udf_per_point, k, dim=1, largest=False)
+            return closest.mean(1)
+        if mode == "median":
+            return udf_per_point.median(dim=1).values
+        if mode == "max":
+            return udf_per_point.max(dim=1).values
+        if mode == "meanmax":
+            return 0.5 * udf_per_point.mean(1) + 0.5 * udf_per_point.max(dim=1).values
+        return udf_per_point.mean(1)
 
     def forward(self, x, x_downsampled):
         pcd_US_moved_tensor = x  # [1, 3, N]
@@ -146,7 +178,7 @@ class NeuralReg(nn.Module):
                 transformed_US_pcd_coarse = (
                     torch.matmul(rotation_matrices, pcd_US_moved_tensor_downsampled) + t.unsqueeze(-1)
                 ).transpose(1, 2)
-                transformed_US_pcd_udf = self.udf_network.udf(transformed_US_pcd_coarse).squeeze(-1).mean(1)  # [num_heads]
+                transformed_US_pcd_udf = self._aggregate(self.udf_network.udf(transformed_US_pcd_coarse).squeeze(-1))  # [num_heads]
 
                 refine_k = self.refine_topk_heads
                 if refine_k is not None and 0 < refine_k < self.num_heads:
@@ -156,14 +188,14 @@ class NeuralReg(nn.Module):
                     transformed_US_pcd_refined = (
                         torch.matmul(rotation_matrices[refine_idx], pcd_US_moved_tensor) + t[refine_idx].unsqueeze(-1)
                     ).transpose(1, 2)
-                    refined_scores = self.udf_network.udf(transformed_US_pcd_refined).squeeze(-1).mean(1)
+                    refined_scores = self._aggregate(self.udf_network.udf(transformed_US_pcd_refined).squeeze(-1))
                     transformed_US_pcd_udf = transformed_US_pcd_udf.clone()
                     transformed_US_pcd_udf[refine_idx] = refined_scores
             else:
                 transformed_US_pcd = (
                     torch.matmul(rotation_matrices, pcd_US_moved_tensor) + t.unsqueeze(-1)
                 ).transpose(1, 2)
-                transformed_US_pcd_udf = self.udf_network.udf(transformed_US_pcd).squeeze(-1).mean(1)  # [num_heads]
+                transformed_US_pcd_udf = self._aggregate(self.udf_network.udf(transformed_US_pcd).squeeze(-1))  # [num_heads]
 
 
         udf_best, best_indices = transformed_US_pcd_udf.min(dim=0)

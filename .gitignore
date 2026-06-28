@@ -1,4 +1,7 @@
 
+# Claude Code auto-memory (created in-container during testing; never publish)
+.claude-memory/
+
 models_UltraBoneUDF/checkpoints
 .idea
 .vscode/
@@ -8,6 +11,15 @@ __pycache__
 results_head_values
 checkpoints_NeuralUDF
 
+# data: mounted/generated, not committed (keep only data/README.md)
+data/*
+!data/README.md
+
+# reconstruction package: downloaded model weights + scratch outputs
+# (the model is fetched from Hugging Face on first use; only the README is tracked)
+reconstruction/models/*.pth
+reconstruction/_smoke_output/
+reconstruction/_denoise_cache/
 
 extensions/chamfer_dist/build/
 extensions/chamfer_dist/dist/

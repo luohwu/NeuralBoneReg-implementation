@@ -1,34 +1,57 @@
 {
-  "name": "nirr-stand-alone",
+  "name": "NeuralBoneReg (CUDA + Claude Code)",
   "build": {
     "context": "..",
     "dockerfile": "../Dockerfile"
   },
-  "workspaceFolder": "/workspace/stand_alone",
-  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace/stand_alone,type=bind",
+
+  // The repo is mounted at /workspace (matches the Dockerfile WORKDIR).
+  "workspaceFolder": "/workspace",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
+
+  // Mount the RAW datasets read by the reconstruction / data-prep steps:
+  //   /mnt/UltraBonesHip  -> reconstruction/conf/reconstruction.yaml dataset_root
+  //   /mnt/UltraBones100k -> main_UltraBones100k.py data prep (merge + denoise per-record pcds)
+  // Edit the host paths below for your machine. NOTE: changing mounts requires a
+  // devcontainer rebuild ("Dev Containers: Rebuild Container").
   "mounts": [
-    "source=${localWorkspaceFolder}/../data,target=/workspace/data,type=bind",
-    "source=${localWorkspaceFolder}/../checkpoints_UltraBoneUDF,target=/workspace/checkpoints_UltraBoneUDF,type=bind",
-    "source=${localWorkspaceFolder}/../pcds_mm,target=/workspace/pcds_mm,type=bind"
+    "source=F:/UltraBonesHip,target=/mnt/UltraBonesHip,type=bind,consistency=cached",
+    "source=F:/UltraBones100k,target=/mnt/UltraBones100k,type=bind,consistency=cached"
   ],
-  "runArgs": [
-    "--gpus",
-    "all",
-    "--shm-size=16g"
-  ],
+
+  "runArgs": ["--gpus", "all", "--shm-size=16g"],
+
+  // Node is needed to install the Claude Code CLI.
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {}
+  },
+
+  // Install the Claude Code CLI and apply the container-only no-prompt settings
+  // (kept out of the committed project settings so they only apply in-container).
+  // Also symlink Claude's auto-memory dir to the bind-mounted workspace so it survives
+  // container rebuilds (the container FS is ephemeral; /workspace is persisted on the host).
+  "postCreateCommand": "npm install -g @anthropic-ai/claude-code && mkdir -p /root/.claude && cp .devcontainer/claude-settings.json /root/.claude/settings.json && mkdir -p /root/.claude/projects/-workspace /workspace/.claude-memory && rm -rf /root/.claude/projects/-workspace/memory && ln -sfn /workspace/.claude-memory /root/.claude/projects/-workspace/memory",
+
+  // IS_SANDBOX lets Claude Code bypass permissions while running as root inside
+  // this isolated container, so no 'yes' prompts. The destructive-command circuit
+  // breaker (e.g. rm -rf /) still applies.
+  "containerEnv": {
+    "IS_SANDBOX": "1"
+  },
+
   "customizations": {
     "vscode": {
       "settings": {
         "python.defaultInterpreterPath": "/opt/conda/bin/python",
-        "python.analysis.extraPaths": [
-          "/workspace/stand_alone"
-        ]
+        "python.analysis.extraPaths": ["/workspace"]
       },
       "extensions": [
         "ms-python.python",
-        "ms-python.vscode-pylance"
+        "ms-python.vscode-pylance",
+        "anthropic.claude-code"
       ]
     }
   },
+
   "remoteUser": "root"
 }

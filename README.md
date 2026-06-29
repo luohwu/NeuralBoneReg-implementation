@@ -342,6 +342,18 @@ If you use NeuralBoneReg in your research, please cite:
   year    = {2026},
   doi     = {10.1016/j.media.2026.104133}
 }
+
+@article{WU2025102690,
+title = {UltraBoneUDF: Self-supervised bone surface reconstruction from ultrasound based on neural unsigned distance functions},
+journal = {Computerized Medical Imaging and Graphics},
+pages = {102690},
+year = {2025},
+issn = {0895-6111},
+doi = {https://doi.org/10.1016/j.compmedimag.2025.102690},
+url = {https://www.sciencedirect.com/science/article/pii/S0895611125001995},
+author = {Luohong Wu and Matthias Seibold and Nicola A. Cavalcanti and Giuseppe Loggia and Lisa Reissner and Bastian Sigrist and Jonas Hein and Lilian Calvet and Arnd Viehöfer and Philipp Fürnstahl},
+keywords = {Ultrasound bone surface reconstruction, Neural unsigned distance function, Neural implicit representation},
+}
 ```
 
 If you use the bundled datasets, please also cite their original sources: SpineDepth ([Liebmann et al., 2021](https://doi.org/10.3390/jimaging7090164)) and [UltraBones100k](https://github.com/luohwu/UltraBones100k).
